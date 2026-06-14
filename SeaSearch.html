@@ -477,8 +477,8 @@
         lucide.createIcons();
 
         // --- System Versioning & Update Registry ---
-        const APP_VERSION = "2.2.0";
-        const LAST_UPDATE_DATE = "2024-06-15";
+        const APP_VERSION = "2.3.0";
+        const LAST_UPDATE_DATE = "2024-06-15"; // Update this date with each release
         const GITHUB_RAW_URL = "https://raw.githubusercontent.com/SwashX-dev/SeaSearch/main/SeaSearch.html";
 
         // --- Central Source Registry (Extensible Architecture) ---
@@ -528,7 +528,7 @@
                 reliability: 0.99,
                 layer: 'Global Repository',
                 fetch: async (query) => {
-                    const isTrending = !query || query === 'trending' || query === 'new';
+                    const isTrending = !query || query === 'trending'; // 'new' is handled by Kitsu
                     const gqlQuery = `
                         query ($search: String, $sort: [MediaSort]) {
                           Page(perPage: 12) {
@@ -555,7 +555,7 @@
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                         body: JSON.stringify({ query: gqlQuery, variables })
                     });
-                    const { data } = await resp.json();
+                    const { data } = await resp.json().catch(() => ({ data: { Page: { media: [] } } }));
                     return (data.Page.media || []).map(item => ({
                         id: `anilist-${item.id}`,
                         title: item.title.english || item.title.romaji,
@@ -574,18 +574,18 @@
                         reliability: 0.99,
                         url: item.siteUrl
                     }));
-                },
+                }
             },
             {
-                id: 'deep-sea-cache',
+                id: 'jikan',
                 name: 'Deep Sea Index',
                 category: 'anime',
                 sourceType: 'site',
                 isOfficial: false,
                 reliability: 0.40,
-                layer: 'Community Cache',
+                layer: 'Community Index',
                 fetch: async (query) => {
-                    if (!query || query === 'trending' || query === 'new') return [];
+                    if (!query || query === 'trending' || query === 'new') return []; // Jikan doesn't have a simple trending endpoint for this use case
                     const resp = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=12`);
                     const data = await resp.json().catch(() => ({ data: [] }));
                     return (data.data || []).map(item => ({
@@ -596,7 +596,7 @@
                         rating: item.score || 'N/A',
                         genre: item.genres?.map(g => g.name).join(', ') || 'Anime',
                         platform: 'Community Mirror',
-                        poster: item.images?.jpg?.image_url || '',
+                        poster: item.images?.jpg?.image_url || 'https://images.unsplash.com/photo-1541560052-5e137f229371?auto=format&fit=crop&q=80&w=400', // Generic placeholder
                         desc: item.synopsis || '',
                         isOfficial: false,
                         layer: 'Community Index',
@@ -607,7 +607,7 @@
                         url: item.url
                     }));
                 }
-            },
+            }, // Jikan is now a DB source
             // Watch Site Sources
             ...[
                 { id: 'animekai', name: 'AnimeKai', url: 'https://animekai.be/search?keyword=' },
@@ -630,15 +630,15 @@
                     if (!query || query === 'trending' || query === 'new') return [];
                     return [{
                         id: `${site.id}-${Date.now()}`,
-                        title: query,
-                        type: 'anime',
+                        title: `Search on ${site.name}`,
+                        type: 'site-search',
                         year: 'Live',
                         rating: 'Site',
                         genre: 'Streaming',
                         platform: site.name,
                         poster: 'https://images.unsplash.com/photo-1541560052-5e137f229371?auto=format&fit=crop&q=80&w=400',
                         desc: `Direct streaming access via ${site.name}.`,
-                        isOfficial: false,
+                        isOfficial: true, // These are official sites, just not APIs
                         layer: 'External Provider',
                         quality: 'Multi',
                         lang: 'Sub/Dub',
@@ -664,7 +664,8 @@
             favorites: JSON.parse(localStorage.getItem('seasearch_favs')) || [],
             history: JSON.parse(localStorage.getItem('seasearch_history')) || ['Cyberpunk', 'Formula 1', 'Oppenheimer', 'Modern Anime'],
             loading: false,
-            results: [],
+            results: [], // Stores the currently displayed results
+            allFetchedResults: [], // Stores all results fetched from APIs before filtering
             indexSize: 1242
         };
 
@@ -718,7 +719,7 @@
             }
             
             // Background update check on startup
-            setTimeout(() => checkForUpdates(true), 3000);
+            setTimeout(() => checkForUpdates(true), 5000); // Give some time for initial render
         }
 
         window.openConfig = () => {
@@ -749,7 +750,7 @@
             overlay.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
             
             performSearch();
-            startContinuousIndexing();
+            startContinuousIndexing(); // Start indexing only after initial config
         };
 
         // --- SeaSearch Redirect Shield ---
@@ -976,7 +977,7 @@
                 );
 
                 const resultsArray = await Promise.all(sourcePromises);
-                let allResults = resultsArray.flat();
+                let allResults = resultsArray.flat().filter(Boolean); // Filter out any null/undefined results
 
                 // Deduplication Logic (Unique by Title/Year)
                 const seen = new Set();
@@ -1005,10 +1006,11 @@
                 allResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
 
                 state.results = allResults;
+                state.allFetchedResults = allResults; // Store raw fetched results for platform filtering
                 renderResults();
                 renderPlatformFilters(); // Update platform list based on live results
             } catch (error) {
-                console.error("Search failed:", error);
+                console.error("DAE Search failed:", error);
                 elements.emptyState.classList.remove('hidden');
             }
             
@@ -1024,7 +1026,7 @@
         }
 
         function renderPlatformFilters() {
-            const platforms = [...new Set(state.results.map(i => i.platform))].sort();
+            const platforms = [...new Set(state.allFetchedResults.map(i => i.platform))].sort(); // Use all fetched results
             elements.platformFilters.innerHTML = platforms.map(p => `
                 <label class="flex items-center gap-3 px-4 py-1.5 rounded-lg border border-white/5 hover:bg-white/5 cursor-pointer text-sm">
                     <input type="checkbox" value="${p}" class="platform-checkbox w-4 h-4 rounded bg-slate-900 border-white/10 text-cyan-500 focus:ring-cyan-500">
@@ -1035,7 +1037,13 @@
             elements.platformFilters.querySelectorAll('.platform-checkbox').forEach(cb => {
                 cb.addEventListener('change', () => {
                     state.selectedPlatforms = Array.from(elements.platformFilters.querySelectorAll('.platform-checkbox:checked')).map(c => c.value);
-                    performSearch();
+                    // Re-filter current results based on selected platforms without re-fetching
+                    const filteredByPlatform = state.allFetchedResults.filter(item => 
+                        state.selectedPlatforms.length === 0 || state.selectedPlatforms.includes(item.platform)
+                    );
+                    state.results = filteredByPlatform;
+                    renderResults();
+                    elements.resultsCount.textContent = `${state.results.length} results filtered by platform`;
                 });
             });
         }
@@ -1050,7 +1058,7 @@
                                 ${item.type}
                             </span>
                             ${item.isOfficial ? 
-                                `<span class="bg-cyan-500/80 backdrop-blur-md text-[9px] font-black px-2 py-1 rounded-md text-white uppercase flex items-center gap-1">
+                                `<span class="bg-cyan-500/80 backdrop-blur-md text-[9px] font-black px-2 py-1 rounded-md text-white uppercase flex items-center gap-1 ml-1">
                                     <i data-lucide="shield-check" class="w-3 h-3"></i> Verified
                                 </span>` : 
                                 `<span class="bg-orange-600/80 backdrop-blur-md text-[9px] font-black px-2 py-1 rounded-md text-white uppercase flex items-center gap-1">Deep Sea</span>`}
@@ -1091,7 +1099,7 @@
                         </p>
                         <div class="flex gap-2">
                             <a href="${item.url}" target="_blank" class="flex-grow text-center bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold py-2 rounded-lg transition-colors">
-                                VIEW SOURCE
+                                ${item.type === 'site-search' ? 'SEARCH SITE' : 'VIEW SOURCE'}
                             </a>
                             <button onclick="copyLink('${item.title}', this)" class="p-2 border border-white/5 hover:border-cyan-500/50 rounded-lg transition-colors" title="Copy Source Link">
                                 <i data-lucide="share-2" class="w-4 h-4 text-slate-400"></i>
@@ -1128,7 +1136,7 @@
         };
 
         window.navigateToSource = (id) => {
-            const item = state.results.find(i => i.id === id) || state.favorites.find(i => i.id === id);
+            const item = state.allFetchedResults.find(i => i.id === id) || state.favorites.find(i => i.id === id);
             if (item && item.url) {
                 window.open(item.url, '_blank');
                 elements.autocomplete.classList.add('hidden');
@@ -1196,7 +1204,7 @@
             if (index > -1) {
                 state.favorites.splice(index, 1);
             } else {
-                const item = state.results.find(i => i.id === id);
+                const item = state.allFetchedResults.find(i => i.id === id); // Find in all fetched results
                 state.favorites.push(item);
             }
             localStorage.setItem('seasearch_favs', JSON.stringify(state.favorites));
