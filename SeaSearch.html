@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeaSearch DAE | Distributed Aggregation Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- PWA / Standalone App Meta -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#020617">
+
+    <style>
+        :root {
+            --ocean-depth: #020617;
+            --ocean-surface: #0f172a;
+            --teal-glow: #2dd4bf;
+            --cyan-accent: #0ea5e9;
+            --glass: rgba(15, 23, 42, 0.7);
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--ocean-depth);
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--ocean-depth); }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--cyan-accent); }
+
+        .ocean-gradient {
+            background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.15), transparent),
+                        radial-gradient(circle at bottom left, rgba(45, 212, 191, 0.1), transparent);
+        }
+
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(45, 212, 191, 0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 0 15px rgba(45, 212, 191, 0.1);
+        }
+
+        .search-glow:focus-within {
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
+            border-color: var(--cyan-accent);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--cyan-accent), var(--teal-glow));
+            transition: opacity 0.2s;
+        }
+
+        .btn-primary:hover { opacity: 0.9; }
+
+        .filter-chip {
+            transition: all 0.2s;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filter-chip.active {
+            background-color: var(--cyan-accent);
+            color: white;
+            border-color: var(--cyan-accent);
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .animate-in {
+            animation: fadeInScale 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        #autocomplete-dropdown {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Toggle Switch Styling */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #1e293b; transition: .4s; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        input:checked + .slider { background-color: var(--cyan-accent); }
+        .slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px;
+            background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider:before { transform: translateX(18px); }
+
+        .dae-glow {
+            box-shadow: 0 0 30px -5px rgba(14, 165, 233, 0.4);
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Fade Animation for Views */
+        .view-transition { transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .layer-badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+<body class="ocean-gradient min-h-screen">
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 glass-card border-b border-white/5 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-teal-400 rounded-xl flex items-center justify-center dae-glow">
+                <i data-lucide="cpu" class="text-white w-6 h-6"></i>
+            </div>
+            <span class="text-2xl font-extrabold tracking-tighter text-white">SeaSearch<span class="text-cyan-400 ml-1 text-sm font-black border border-cyan-400/30 px-1 rounded">DAE</span></span>
+        </div>
+
+        <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+            <button onclick="setQuery('trending')" class="hover:text-cyan-400 transition-colors">Trending</button>
+            <button onclick="setQuery('new')" class="hover:text-cyan-400 transition-colors">New Releases</button>
+            <button onclick="toggleAbout()" class="hover:text-cyan-400 transition-colors flex items-center gap-1">
+                <i data-lucide="info" class="w-4 h-4"></i> Architecture
+            </button>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <button id="toggle-favorites" class="p-2 hover:bg-white/5 rounded-full relative transition-colors">
+                <i data-lucide="heart" class="w-6 h-6 text-slate-300"></i>
+                <span id="fav-count" class="absolute top-0 right-0 w-5 h-5 bg-cyan-500 text-[10px] flex items-center justify-center rounded-full text-white font-bold hidden border-2 border-slate-900">0</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="pt-32 pb-20 px-6 max-w-7xl mx-auto">
+        <section class="text-center mb-16">
+            <h1 class="text-4xl md:text-6xl font-extrabold mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-500">
+                Distributed Aggregation Engine
+            </h1>
+            <p class="text-slate-400 max-w-2xl mx-auto mb-10 text-lg">
+                Anime discovery and metadata synchronization powered by a global network of providers.
+            </p>
+
+            <!-- Modern Search Bar -->
+            <div class="relative max-w-3xl mx-auto">
+                <div class="search-glow flex items-center bg-slate-900/50 border border-white/10 rounded-2xl p-2 backdrop-blur-xl">
+                    <i data-lucide="search" class="ml-4 w-6 h-6 text-slate-500"></i>
+                    <input 
+                        type="text" 
+                        id="main-search"
+                        placeholder="Search for titles, actors, genres or matches..."
+                        class="w-full bg-transparent px-4 py-3 outline-none text-lg text-white placeholder:text-slate-600"
+                        autocomplete="off"
+                    >
+                    <button id="search-btn" class="btn-primary px-8 py-3 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/20">
+                        Dive In
+                    </button>
+                </div>
+                
+                <!-- Autocomplete Dropdown -->
+                <div id="autocomplete-dropdown" class="absolute top-full left-0 right-0 mt-2 glass-card rounded-2xl hidden z-40 text-left p-2 shadow-2xl border border-white/10">
+                    <!-- Items populated via JS -->
+                </div>
+            </div>
+            
+            <!-- Recent Searches -->
+            <div id="recent-searches" class="mt-6 flex flex-wrap justify-center gap-3">
+                <!-- Populated via JS -->
+            </div>
+        </section>
+
+        <!-- Discovery Interface -->
+        <div class="flex flex-col lg:flex-row gap-8">
+            
+            <!-- Sidebar Filters -->
+            <aside class="lg:w-64 flex-shrink-0 space-y-8">
+                <div>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Content Category</h3>
+                    <div class="flex flex-col gap-2" id="category-filters">
+                        <button class="filter-chip active flex items-center justify-between px-4 py-2 rounded-lg border border-white/5 hover:border-cyan-500/50 text-sm" data-filter="all">
+                            <span>All Content</span>
+                            <i data-lucide="layers" class="w-4 h-4"></i>
+                        </button>
+                        <button class="filter-chip flex items-center justify-between px-4 py-2 rounded-lg border border-white/5 hover:border-cyan-500/50 text-sm" data-filter="anime">
+                            <span>Anime</span>
+                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-white/5">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Streaming Platforms</h3>
+                    <div id="platform-filters" class="flex flex-col gap-2">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-white/5">
+                    <div class="flex items-center justify-between glass-card p-3 rounded-xl border-cyan-500/20">
+                        <div>
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-cyan-400">DAE Deep Sea</h3>
+                            <p class="text-[9px] text-slate-500">Include community/pirate sources</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="pirate-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-white/5">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Sort By</h3>
+                    <select id="sort-order" class="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-sm text-slate-300 outline-none focus:border-cyan-500">
+                        <option value="relevance">Relevance</option>
+                        <option value="newest">Latest Release</option>
+                        <option value="rating">Top Rated</option>
+                        <option value="popularity">Trending</option>
+                    </select>
+                </div>
+            </aside>
+
+            <!-- Results Area -->
+            <div class="flex-grow">
+                <div class="flex items-center justify-between mb-8">
+                    <h2 id="results-title" class="text-xl font-bold text-white flex items-center gap-3">
+                        Global Discovery
+                        <span id="results-count" class="text-sm font-normal text-slate-500"></span>
+                    </h2>
+                    <div id="loading-indicator" class="hidden items-center gap-2 text-cyan-400 text-xs font-bold uppercase tracking-widest">
+                        <div class="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span id="loading-text">
+                            Scanning Layers...
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Results Grid -->
+                <div id="results-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <!-- Skeleton Loader State (Default) -->
+                    <div class="glass-card rounded-2xl h-80 shimmer"></div>
+                    <div class="glass-card rounded-2xl h-80 shimmer"></div>
+                    <div class="glass-card rounded-2xl h-80 shimmer"></div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-state" class="hidden py-20 text-center">
+                    <div class="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i data-lucide="anchor" class="text-slate-600 w-10 h-10"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">No Content Found</h3>
+                    <p class="text-slate-500">Try adjusting your filters or searching for something else.</p>
+                </div>
+
+                <!-- Pagination / Load More -->
+                <div class="mt-12 text-center">
+                    <button id="load-more" class="hidden px-8 py-3 rounded-xl border border-white/10 hover:bg-white/5 font-bold transition-all">
+                        Load More Results
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/5 bg-slate-950/50 py-12 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center">
+                    <i data-lucide="waves" class="text-cyan-400 w-5 h-5"></i>
+                </div>
+                <span class="text-lg font-bold">SeaSearch</span>
+            </div>
+            <div class="text-slate-500 text-sm">
+                © 2024 SeaSearch Aggregator. All rights reserved.
+            </div>
+            <div class="flex gap-6">
+                <i data-lucide="github" class="w-5 h-5 text-slate-500 cursor-pointer hover:text-white transition-colors"></i>
+                <i data-lucide="twitter" class="w-5 h-5 text-slate-500 cursor-pointer hover:text-white transition-colors"></i>
+            </div>
+        </div>
+    </footer>
+
+    <!-- About / Architecture Overlay -->
+    <div id="about-drawer" class="fixed inset-0 z-[110] bg-slate-950/95 backdrop-blur-xl translate-y-full view-transition overflow-y-auto">
+        <div class="max-w-4xl mx-auto px-6 py-20">
+            <button onclick="toggleAbout()" class="absolute top-8 right-8 p-3 hover:bg-white/5 rounded-full">
+                <i data-lucide="chevron-down" class="w-8 h-8"></i>
+            </button>
+
+            <div class="inline-flex items-center gap-2 bg-cyan-500/10 text-cyan-400 px-3 py-1 rounded-full text-xs font-black uppercase mb-6 tracking-widest">
+                <i data-lucide="zap" class="w-3 h-3"></i> Intelligence Core
+            </div>
+            <h2 class="text-4xl md:text-5xl font-black text-white mb-8">Distributed Aggregation <span class="text-cyan-400">Engine</span></h2>
+            
+            <div class="grid md:grid-cols-2 gap-12 text-slate-400 leading-relaxed mb-16">
+                <div>
+                    <h3 class="text-xl font-bold text-white mb-4">What is a DAE?</h3>
+                    <p class="mb-6">SeaSearch isn't a catalog; it's an orchestrator. A **Distributed Aggregation Engine (DAE)** works by maintaining a real-time registry of external sources—APIs, tracking platforms, and metadata databases—and querying them simultaneously upon request.</p>
+                    <p>Instead of manual entry, SeaSearch synchronizes metadata and availability in milliseconds, ensuring you see the most current state of the global anime ecosystem.</p>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white mb-4">Live Discovery</h3>
+                    <p class="mb-6">By decoupling from a static database, our engine provides broader coverage. We support dynamic source registration, meaning we can add hundreds of providers without requiring an application update.</p>
+                    <div class="bg-slate-900 border border-white/5 p-4 rounded-xl">
+                        <h4 class="text-xs font-black uppercase text-cyan-400 mb-2">Active Protocols</h4>
+                        <ul class="text-[10px] space-y-1 font-mono">
+                            <li>> REST API Aggregation (Kitsu, Jikan)</li>
+                            <li>> Community Index Synchronization</li>
+                            <li>> Real-time Availability Verification</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-white/10 pt-16">
+                <div class="flex flex-col md:flex-row gap-8 items-center bg-gradient-to-br from-cyan-500/10 to-transparent p-8 rounded-3xl border border-cyan-500/20">
+                    <div class="w-20 h-20 bg-cyan-500 rounded-2xl flex items-center justify-center shadow-2xl shadow-cyan-500/40 shrink-0">
+                        <i data-lucide="download" class="w-10 h-10 text-white"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-white mb-2">Install as an App</h3>
+                        <p class="text-slate-400 text-sm mb-4">SeaSearch is a Progressive Web App (PWA). Combine the performance of native software with the reach of the web. Save to your home screen for instant access, immersive full-screen experience, and native performance.</p>
+                        <button class="bg-white text-black px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-cyan-400 transition-colors">Install Now</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Favorites Overlay -->
+    <div id="favorites-drawer" class="fixed inset-y-0 right-0 w-full md:w-96 bg-slate-950 shadow-2xl border-l border-white/10 z-[100] translate-x-full view-transition p-6 flex flex-col">
+        <div class="flex items-center justify-between mb-8">
+            <h2 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="heart" class="text-red-500 fill-red-500 w-5 h-5"></i>
+                Hearted Anime
+            </h2>
+            <button id="close-favorites" class="p-2 hover:bg-white/5 rounded-full">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+        
+        <div class="mb-4">
+            <input type="text" id="fav-filter" placeholder="Filter saved anime..." class="w-full bg-slate-900 border border-white/5 rounded-lg px-3 py-2 text-xs outline-none focus:border-cyan-500">
+        </div>
+
+        <div id="favorites-list" class="space-y-4 overflow-y-auto flex-grow hide-scrollbar">
+            <!-- Populated via JS -->
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // --- Central Source Registry (Extensible Architecture) ---
+        const SOURCE_REGISTRY = [
+            {
+                id: 'kitsu',
+                name: 'Kitsu Anime API',
+                category: 'anime',
+                isOfficial: true,
+                reliability: 0.95,
+                layer: 'Specialized Hub',
+                fetch: async (query) => {
+                    const isTrending = !query || query === 'trending' || query === 'new';
+                    const url = isTrending 
+                        ? `https://kitsu.io/api/edge/trending/anime`
+                        : `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(query)}&page[limit]=12`;
+                    
+                    const resp = await fetch(url);
+                    const data = await resp.json();
+                    return data.data.map(item => ({
+                        id: `kitsu-${item.id}`,
+                        title: item.attributes.canonicalTitle,
+                        type: 'anime',
+                        year: item.attributes.startDate ? new Date(item.attributes.startDate).getFullYear() : 'N/A',
+                        rating: item.attributes.averageRating ? (item.attributes.averageRating / 10).toFixed(1) : 'N/A',
+                        genre: 'Anime',
+                        platform: 'Kitsu',
+                        poster: item.attributes.posterImage?.medium || '',
+                        desc: item.attributes.synopsis || '',
+                        isOfficial: true,
+                        layer: 'Specialized Hub',
+                        quality: 'HD',
+                        lang: 'jp/en',
+                        aliases: item.attributes.abbreviatedTitles || [],
+                        reliability: 0.95,
+                        url: `https://kitsu.io/anime/${item.attributes.slug}`
+                    }));
+                },
+            },
+            {
+                id: 'anilist',
+                name: 'AniList GraphQL',
+                category: 'anime',
+                isOfficial: true,
+                reliability: 0.99,
+                layer: 'Global Repository',
+                fetch: async (query) => {
+                    const isTrending = !query || query === 'trending' || query === 'new';
+                    const gqlQuery = `
+                        query ($search: String, $sort: [MediaSort]) {
+                          Page(perPage: 12) {
+                            media(search: $search, type: ANIME, sort: $sort) {
+                              id
+                              title { romaji english }
+                              startDate { year }
+                              averageScore
+                              genres
+                              description
+                              coverImage { medium }
+                              siteUrl
+                              studios(isMain: true) { nodes { name } }
+                            }
+                          }
+                        }
+                    `;
+                    const variables = isTrending 
+                        ? { sort: ["TRENDING_DESC", "POPULARITY_DESC"] }
+                        : { search: query };
+
+                    const resp = await fetch('https://graphql.anilist.co', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ query: gqlQuery, variables })
+                    });
+                    const { data } = await resp.json();
+                    return (data.Page.media || []).map(item => ({
+                        id: `anilist-${item.id}`,
+                        title: item.title.english || item.title.romaji,
+                        type: 'anime',
+                        year: item.startDate?.year || 'N/A',
+                        rating: item.averageScore ? (item.averageScore / 10).toFixed(1) : 'N/A',
+                        genre: item.genres?.slice(0, 2).join(', ') || 'Anime',
+                        platform: item.studios.nodes[0]?.name || 'AniList',
+                        poster: item.coverImage.medium,
+                        desc: item.description?.replace(/<[^>]*>?/gm, '') || '',
+                        isOfficial: true,
+                        layer: 'Global Repository',
+                        quality: '4K/HD',
+                        lang: 'en/jp',
+                        aliases: [item.title.romaji].filter(Boolean),
+                        reliability: 0.99,
+                        url: item.siteUrl
+                    }));
+                },
+            },
+            {
+                id: 'deep-sea-cache',
+                name: 'Deep Sea Index',
+                category: 'anime',
+                isOfficial: false,
+                reliability: 0.40,
+                layer: 'Community Cache',
+                fetch: async (query) => {
+                    if (!query) return [];
+                    const resp = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=12`);
+                    const data = await resp.json();
+                    return (data.data || []).map(item => ({
+                        id: `mal-${item.mal_id}`,
+                        title: item.title,
+                        type: 'anime',
+                        year: item.year || 'N/A',
+                        rating: item.score || 'N/A',
+                        genre: item.genres?.map(g => g.name).join(', ') || 'Anime',
+                        platform: 'Community Mirror',
+                        poster: item.images?.jpg?.image_url || '',
+                        desc: item.synopsis || '',
+                        isOfficial: false,
+                        layer: 'Community Index',
+                        quality: 'HD',
+                        lang: 'jp/en',
+                        aliases: item.title_synonyms || [],
+                        reliability: 0.98,
+                        url: item.url
+                    }));
+                }
+            }
+        ];
+
+        // --- Application State ---
+        const state = {
+            query: '',
+            filter: 'all',
+            quality: 'all',
+            lang: 'all',
+            selectedPlatforms: [],
+            includePirate: false,
+            sortBy: 'relevance',
+            favorites: JSON.parse(localStorage.getItem('seasearch_favs')) || [],
+            history: JSON.parse(localStorage.getItem('seasearch_history')) || ['Cyberpunk', 'Formula 1', 'Oppenheimer', 'Modern Anime'],
+            loading: false,
+            results: [],
+            indexSize: 1242
+        };
+
+        // --- DOM Elements ---
+        const elements = {
+            searchInput: document.getElementById('main-search'),
+            searchBtn: document.getElementById('search-btn'),
+            resultsGrid: document.getElementById('results-grid'),
+            autocomplete: document.getElementById('autocomplete-dropdown'),
+            categoryFilters: document.getElementById('category-filters'),
+            loadingIndicator: document.getElementById('loading-indicator'),
+            emptyState: document.getElementById('empty-state'),
+            resultsTitle: document.getElementById('results-title'),
+            resultsCount: document.getElementById('results-count'),
+            recentSearches: document.getElementById('recent-searches'),
+            favCount: document.getElementById('fav-count'),
+            favDrawer: document.getElementById('favorites-drawer'),
+            toggleFavs: document.getElementById('toggle-favorites'),
+            closeFavs: document.getElementById('close-favorites'),
+            favList: document.getElementById('favorites-list'),
+            sortOrder: document.getElementById('sort-order'),
+            pirateToggle: document.getElementById('pirate-toggle'),
+            platformFilters: document.getElementById('platform-filters'),
+            qualityFilter: document.getElementById('quality-filter'),
+            langFilter: document.getElementById('language-filter'),
+            loadingText: document.getElementById('loading-text'),
+            indexProgress: document.getElementById('index-progress'),
+            aboutDrawer: document.getElementById('about-drawer'),
+            favFilter: document.getElementById('fav-filter'),
+            favCount: document.getElementById('fav-count')
+        };
+
+        // --- Core Functions ---
+
+        function init() {
+            renderRecentSearches();
+            updateFavCount();
+            performSearch(); // Initial load (Trending)
+            startContinuousIndexing();
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            // Search input events
+            elements.searchInput.addEventListener('input', (e) => {
+                const val = e.target.value;
+                if (val.length === 0) {
+                    state.query = '';
+                    performSearch();
+                } else if (val.length > 1) {
+                    showAutocomplete(val);
+                } else {
+                    elements.autocomplete.classList.add('hidden');
+                }
+            });
+
+            elements.searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') executeSearch();
+            });
+
+            elements.searchBtn.addEventListener('click', executeSearch);
+
+            // Filter events
+            elements.categoryFilters.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    elements.categoryFilters.querySelector('.active').classList.remove('active');
+                    btn.classList.add('active');
+                    state.filter = btn.dataset.filter;
+                    performSearch();
+                });
+            });
+
+            // Sort events
+            elements.sortOrder.addEventListener('change', (e) => {
+                state.sortBy = e.target.value;
+                performSearch();
+            });
+
+            // Pirate toggle event
+            elements.pirateToggle.addEventListener('change', (e) => {
+                state.includePirate = e.target.checked;
+                performSearch();
+            });
+
+            // Advanced filters
+            elements.qualityFilter.addEventListener('change', (e) => {
+                state.quality = e.target.value;
+                performSearch();
+            });
+
+            elements.langFilter.addEventListener('change', (e) => {
+                state.lang = e.target.value;
+                performSearch();
+            });
+
+            // Favorites events
+            elements.toggleFavs.addEventListener('click', () => {
+                renderFavorites();
+                elements.favDrawer.classList.toggle('translate-x-full');
+            });
+
+            elements.closeFavs.addEventListener('click', () => {
+                elements.favDrawer.classList.add('translate-x-full');
+            });
+
+            elements.favFilter.addEventListener('input', (e) => {
+                const val = e.target.value.toLowerCase();
+                renderFavorites(val);
+            })
+
+            // Global click to close autocomplete
+            document.addEventListener('click', (e) => {
+                if (!elements.searchInput.contains(e.target) && !elements.autocomplete.contains(e.target)) {
+                    elements.autocomplete.classList.add('hidden');
+                }
+            });
+        }
+
+        function executeSearch() {
+            const query = elements.searchInput.value.trim();
+            if (query) {
+                addToHistory(query);
+                state.query = query;
+                performSearch();
+                elements.autocomplete.classList.add('hidden');
+            }
+        }
+
+        window.toggleAbout = () => {
+            const isClosed = elements.aboutDrawer.classList.contains('translate-y-full');
+            elements.aboutDrawer.classList.toggle('translate-y-full', !isClosed);
+            document.body.style.overflow = isClosed ? 'hidden' : '';
+        };
+
+        window.setQuery = (q) => {
+            elements.searchInput.value = q;
+            state.query = q;
+            performSearch();
+        };
+
+        async function performSearch() {
+            const query = state.query.toLowerCase();
+            setLoading(true);
+            elements.emptyState.classList.add('hidden');
+            elements.resultsGrid.innerHTML = `
+                <div class="glass-card rounded-2xl h-80 shimmer"></div>
+                <div class="glass-card rounded-2xl h-80 shimmer"></div>
+                <div class="glass-card rounded-2xl h-80 shimmer"></div>
+            `;
+            
+            try {
+                elements.loadingText.textContent = "DAE Multi-Source Broadcast...";
+                
+                // Filter active sources based on category
+                const activeSources = SOURCE_REGISTRY.filter(s => 
+                    (state.filter === 'all' || s.category === state.filter) &&
+                    (state.includePirate || s.isOfficial)
+                );
+
+                // Execute parallel fetches from all configured sources
+                const sourcePromises = activeSources.map(source => 
+                    source.fetch(state.query).catch(err => {
+                        console.error(`Source ${source.name} failed:`, err);
+                        return [];
+                    })
+                );
+
+                const resultsArray = await Promise.all(sourcePromises);
+                let allResults = resultsArray.flat();
+
+                // Deduplication Logic (Unique by Title/Year)
+                const seen = new Set();
+                allResults = allResults.filter(item => {
+                    const key = `${item.title.toLowerCase().trim()}-${item.year}`;
+                    const isDuplicate = seen.has(key);
+                    seen.add(key);
+                    return !isDuplicate;
+                });
+
+                // Relevance and Ranking
+                allResults = allResults.map(item => {
+                    let score = 0;
+                    if (state.query) {
+                        const q = state.query.toLowerCase();
+                        if (item.title.toLowerCase() === q) score += 100;
+                        else if (item.title.toLowerCase().startsWith(q)) score += 50;
+                        else if (item.title.toLowerCase().includes(q)) score += 20;
+                        if (item.aliases.some(a => a.toLowerCase().includes(q))) score += 40;
+                    }
+                    score = score * (0.5 + item.reliability);
+                    return { ...item, relevanceScore: score };
+                });
+
+                // Sorting
+                allResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+
+                state.results = allResults;
+                renderResults();
+                renderPlatformFilters(); // Update platform list based on live results
+            } catch (error) {
+                console.error("Search failed:", error);
+                elements.emptyState.classList.remove('hidden');
+            }
+            
+            setLoading(false);
+            elements.resultsTitle.textContent = state.query ? `Discovery for "${state.query}"` : 'Universal Feed';
+            
+            if (state.results.length === 0) {
+                elements.resultsCount.textContent = '0 results aggregated';
+                elements.emptyState.classList.remove('hidden');
+            } else {
+                elements.resultsCount.textContent = `${state.results.length} results synchronized from ${[...new Set(state.results.map(r => r.platform))].length} sources`;
+            }
+        }
+
+        function renderPlatformFilters() {
+            const platforms = [...new Set(state.results.map(i => i.platform))].sort();
+            elements.platformFilters.innerHTML = platforms.map(p => `
+                <label class="flex items-center gap-3 px-4 py-1.5 rounded-lg border border-white/5 hover:bg-white/5 cursor-pointer text-sm">
+                    <input type="checkbox" value="${p}" class="platform-checkbox w-4 h-4 rounded bg-slate-900 border-white/10 text-cyan-500 focus:ring-cyan-500">
+                    <span class="text-slate-400">${p}</span>
+                </label>
+            `).join('');
+            
+            elements.platformFilters.querySelectorAll('.platform-checkbox').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    state.selectedPlatforms = Array.from(elements.platformFilters.querySelectorAll('.platform-checkbox:checked')).map(c => c.value);
+                    performSearch();
+                });
+            });
+        }
+
+        function renderResults() {
+            elements.resultsGrid.innerHTML = state.results.map(item => `
+                <article class="glass-card rounded-2xl overflow-hidden group animate-in">
+                    <div class="relative h-48 overflow-hidden">
+                        <img src="${item.poster}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                        <div class="absolute top-3 left-3 flex gap-2">
+                            <span class="bg-black/60 backdrop-blur-md text-[10px] font-bold px-2 py-1 rounded-md text-white uppercase tracking-tighter">
+                                ${item.type}
+                            </span>
+                            ${item.isOfficial ? 
+                                `<span class="bg-cyan-500/80 backdrop-blur-md text-[9px] font-black px-2 py-1 rounded-md text-white uppercase flex items-center gap-1">
+                                    <i data-lucide="shield-check" class="w-3 h-3"></i> Verified
+                                </span>` : 
+                                `<span class="bg-orange-600/80 backdrop-blur-md text-[9px] font-black px-2 py-1 rounded-md text-white uppercase flex items-center gap-1">Deep Sea</span>`}
+                        </div>
+                        <div class="absolute bottom-3 right-3 flex flex-col items-end gap-1">
+                            <span class="layer-badge bg-slate-900/80 text-slate-400 backdrop-blur-sm border border-white/10">
+                                ${item.layer}
+                            </span>
+                            <span class="layer-badge bg-cyan-950/80 text-cyan-400 backdrop-blur-sm border border-cyan-500/20">
+                                ${item.quality}
+                            </span>
+                        </div>
+                        <button onclick="toggleFavorite(${item.id})" class="absolute top-3 right-3 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-colors">
+                            <i data-lucide="heart" class="w-4 h-4 ${state.favorites.some(f => f.id === item.id) ? 'fill-red-500 text-red-500' : 'text-white'}"></i>
+                        </button>
+                        <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-slate-900 to-transparent">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="activity" class="w-3 h-3 text-cyan-400 animate-pulse"></i>
+                                <span class="text-[10px] font-bold text-cyan-100 uppercase tracking-widest">Available on ${item.platform}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-white leading-tight">${item.title}</h3>
+                            <div class="flex items-center gap-1 bg-cyan-500/10 px-1.5 py-0.5 rounded text-cyan-400 text-xs font-bold">
+                                <i data-lucide="star" class="w-3 h-3 fill-cyan-400"></i>
+                                ${item.rating}
+                            </div>
+                        </div>
+                        <div class="flex gap-3 text-[10px] text-slate-500 font-bold uppercase mb-3">
+                            <span>${item.year}</span>
+                            <span class="w-1 h-1 bg-slate-700 rounded-full my-auto"></span>
+                            <span>${item.genre}</span>
+                        </div>
+                        <p class="text-xs text-slate-400 line-clamp-2 mb-4">
+                            ${item.desc}
+                        </p>
+                        <div class="flex gap-2">
+                            <a href="${item.url}" target="_blank" class="flex-grow text-center bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold py-2 rounded-lg transition-colors">
+                                VIEW SOURCE
+                            </a>
+                            <button onclick="copyLink('${item.title}', this)" class="p-2 border border-white/5 hover:border-cyan-500/50 rounded-lg transition-colors" title="Copy Source Link">
+                                <i data-lucide="share-2" class="w-4 h-4 text-slate-400"></i>
+                            </button>
+                        </div>
+                    </div>
+                </article>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function showAutocomplete(val) {
+            const matches = state.results.filter(i => i.title.toLowerCase().includes(val.toLowerCase())).slice(0, 5);
+            
+            if (matches.length > 0) {
+                elements.autocomplete.innerHTML = matches.map(item => `
+                    <div onclick="navigateToSource(${item.id})" class="flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl cursor-pointer transition-colors group">
+                        <img src="${item.poster}" class="w-10 h-10 rounded-lg object-cover">
+                        <div>
+                            <div class="text-sm font-bold text-white group-hover:text-cyan-400">${item.title}</div>
+                            <div class="text-[10px] text-slate-500 uppercase font-bold">${item.type} • ${item.year}</div>
+                        </div>
+                    </div>
+                `).join('');
+                elements.autocomplete.classList.remove('hidden');
+            } else {
+                elements.autocomplete.classList.add('hidden');
+            }
+        }
+
+        window.selectAutocomplete = (title) => {
+            elements.searchInput.value = title;
+            executeSearch();
+        };
+
+        window.navigateToSource = (id) => {
+            const item = state.results.find(i => i.id === id) || state.favorites.find(i => i.id === id);
+            if (item && item.url) {
+                window.open(item.url, '_blank');
+                elements.autocomplete.classList.add('hidden');
+            }
+        };
+
+        function setLoading(isLoading) {
+            state.loading = isLoading;
+            if (isLoading) {
+                elements.loadingIndicator.classList.remove('hidden');
+                elements.loadingIndicator.classList.add('flex');
+            } else {
+                elements.loadingIndicator.classList.add('hidden');
+                elements.loadingIndicator.classList.remove('flex');
+            }
+        }
+
+        function startContinuousIndexing() {
+            setInterval(() => {
+                state.indexSize += Math.floor(Math.random() * 5);
+                const progress = (state.indexSize / 5000) * 100;
+                elements.indexProgress.style.width = `${progress}%`;
+                const p = document.querySelector('#index-status p');
+                if (p) p.textContent = `Sources: ${state.indexSize.toLocaleString()} and growing`;
+            }, 5000);
+        }
+
+        // --- History & Favorites Logic ---
+
+        function addToHistory(query) {
+            state.history = [query, ...state.history.filter(h => h !== query)].slice(0, 6);
+            localStorage.setItem('seasearch_history', JSON.stringify(state.history));
+            renderRecentSearches();
+        }
+
+        function renderRecentSearches() {
+            elements.recentSearches.innerHTML = state.history.map(h => `
+                <button onclick="searchQuery('${h}')" class="px-4 py-1.5 bg-slate-900/40 border border-white/5 hover:border-cyan-500/50 rounded-full text-xs text-slate-400 hover:text-white transition-all">
+                    ${h}
+                </button>
+            `).join('');
+        }
+
+        window.searchQuery = (q) => {
+            elements.searchInput.value = q;
+            executeSearch();
+        };
+
+        window.copyLink = (title, btn) => {
+            navigator.clipboard.writeText(`https://seasearch.com/watch?q=${encodeURIComponent(title)}`);
+            const originalHtml = '<i data-lucide="share-2" class="w-4 h-4 text-slate-400"></i>';
+            const successHtml = '<i data-lucide="check" class="w-4 h-4 text-green-400"></i>';
+            if (btn) btn.innerHTML = successHtml;
+            lucide.createIcons();
+            setTimeout(() => { if(btn) btn.innerHTML = originalHtml; lucide.createIcons(); }, 2000);
+        };
+
+        window.toggleFavorite = (id) => {
+            const index = state.favorites.findIndex(f => f.id === id);
+            if (index > -1) {
+                state.favorites.splice(index, 1);
+            } else {
+                const item = state.results.find(i => i.id === id);
+                state.favorites.push(item);
+            }
+            localStorage.setItem('seasearch_favs', JSON.stringify(state.favorites));
+            updateFavCount();
+            renderResults();
+            if (!elements.favDrawer.classList.contains('translate-x-full')) renderFavorites();
+        };
+
+        function updateFavCount() {
+            const count = state.favorites.length;
+            elements.favCount.textContent = count;
+            elements.favCount.classList.toggle('hidden', count === 0);
+        }
+
+        function renderFavorites(filterStr = "") {
+            const items = filterStr 
+                ? state.favorites.filter(f => f.title.toLowerCase().includes(filterStr))
+                : state.favorites;
+
+            if (items.length === 0) {
+                elements.favList.innerHTML = `
+                    <div class="py-20 text-center opacity-50">
+                        <i data-lucide="heart" class="w-12 h-12 mx-auto mb-4"></i>
+                        <p class="text-sm">Your hearted items will appear here.</p>
+                    </div>
+                `;
+            } else {
+                elements.favList.innerHTML = state.favorites.map(item => `
+                    <div class="flex gap-4 bg-slate-800/40 p-3 rounded-xl border border-white/5 relative">
+                        <img src="${item.poster}" class="w-16 h-20 rounded-lg object-cover">
+                        <div class="flex-grow pr-6">
+                            <div class="text-sm font-bold text-white truncate">${item.title}</div>
+                            <div class="text-[10px] text-cyan-400 font-bold mb-2 uppercase">${item.platform} Source</div>
+                            <a href="${item.url}" target="_blank" class="text-[9px] bg-cyan-500 text-white px-2 py-1 rounded font-black uppercase">Watch Now</a>
+                        </div>
+                        <button onclick="toggleFavorite(${item.id})" class="absolute top-2 right-2 text-red-500">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `).join('');
+            }
+            lucide.createIcons();
+        }
+
+        // Boot
+        init();
+
+    </script>
+</body>
+</html>
