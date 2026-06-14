@@ -166,6 +166,9 @@
             <button onclick="toggleAbout()" class="hover:text-cyan-400 transition-colors flex items-center gap-1">
                 <i data-lucide="info" class="w-4 h-4"></i> Architecture
             </button>
+            <button onclick="openConfig()" class="hover:text-cyan-400 transition-colors flex items-center gap-1">
+                <i data-lucide="settings-2" class="w-4 h-4"></i> System Config
+            </button>
         </div>
 
         <div class="flex items-center gap-4">
@@ -229,6 +232,21 @@
                         <button class="filter-chip flex items-center justify-between px-4 py-2 rounded-lg border border-white/5 hover:border-cyan-500/50 text-sm" data-filter="anime">
                             <span>Anime</span>
                             <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-white/5">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Source Type</h3>
+                    <div class="flex flex-col gap-2" id="source-type-filters">
+                        <button class="filter-chip active flex items-center justify-between px-4 py-2 rounded-lg border border-white/5 hover:border-cyan-500/50 text-sm" data-source-type="all">
+                            <span>All Sources</span>
+                        </button>
+                        <button class="filter-chip flex items-center justify-between px-4 py-2 rounded-lg border border-white/5 hover:border-cyan-500/50 text-sm" data-source-type="db">
+                            <span>Databases (DB)</span>
+                        </button>
+                        <button class="filter-chip flex items-center justify-between px-4 py-2 rounded-lg border border-white/5 hover:border-cyan-500/50 text-sm" data-source-type="site">
+                            <span>Streaming Sites</span>
                         </button>
                     </div>
                 </div>
@@ -325,6 +343,43 @@
         </div>
     </footer>
 
+    <!-- Startup Configuration Overlay -->
+    <div id="startup-overlay" class="fixed inset-0 z-[300] bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-6 view-transition">
+        <div class="glass-card max-w-md w-full p-8 rounded-3xl border-cyan-500/30 shadow-2xl dae-glow">
+            <div class="w-16 h-16 bg-cyan-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-500/20">
+                <i data-lucide="settings-2" class="text-white w-10 h-10"></i>
+            </div>
+            <h2 class="text-3xl font-black text-white mb-2">Engine Setup</h2>
+            <p class="text-slate-400 mb-8 text-sm leading-relaxed">Configure the Distributed Aggregation Engine protocols before initializing the search layers.</p>
+            
+            <div class="space-y-6 mb-10">
+                <div class="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                    <div>
+                        <h3 class="text-xs font-black uppercase text-cyan-400 tracking-widest">Deep Sea Mode</h3>
+                        <p class="text-[10px] text-slate-500">Enable community & mirror sources</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="config-pirate-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-xs font-black uppercase text-slate-500 tracking-widest px-1">Default Source Priority</h3>
+                    <select id="config-source-type" class="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-sm text-white outline-none focus:border-cyan-500">
+                        <option value="all">Comprehensive (All Sources)</option>
+                        <option value="db">Verified Databases Only</option>
+                        <option value="site">Streaming Providers Only</option>
+                    </select>
+                </div>
+            </div>
+
+            <button onclick="startEngine()" class="w-full btn-primary py-4 rounded-2xl font-black text-white uppercase tracking-widest shadow-xl shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                Initialize Engine
+            </button>
+        </div>
+    </div>
+
     <!-- About / Architecture Overlay -->
     <div id="about-drawer" class="fixed inset-0 z-[110] bg-slate-950/95 backdrop-blur-xl translate-y-full view-transition overflow-y-auto">
         <div class="max-w-4xl mx-auto px-6 py-20">
@@ -358,14 +413,38 @@
             </div>
 
             <div class="border-t border-white/10 pt-16">
-                <div class="flex flex-col md:flex-row gap-8 items-center bg-gradient-to-br from-cyan-500/10 to-transparent p-8 rounded-3xl border border-cyan-500/20">
-                    <div class="w-20 h-20 bg-cyan-500 rounded-2xl flex items-center justify-center shadow-2xl shadow-cyan-500/40 shrink-0">
-                        <i data-lucide="download" class="w-10 h-10 text-white"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-2xl font-bold text-white mb-2">Install as an App</h3>
-                        <p class="text-slate-400 text-sm mb-4">SeaSearch is a Progressive Web App (PWA). Combine the performance of native software with the reach of the web. Save to your home screen for instant access, immersive full-screen experience, and native performance.</p>
-                        <button class="bg-white text-black px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-cyan-400 transition-colors">Install Now</button>
+                <div class="bg-gradient-to-br from-cyan-900/20 to-transparent p-8 rounded-3xl border border-white/10 relative overflow-hidden">
+                    <div class="flex flex-col md:flex-row gap-8 items-center relative z-10">
+                        <div id="update-icon-container" class="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center shadow-2xl shrink-0 transition-all duration-500">
+                            <i data-lucide="refresh-cw" class="w-10 h-10 text-cyan-400" id="update-icon"></i>
+                        </div>
+                        <div class="flex-grow text-center md:text-left">
+                            <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
+                                <h3 class="text-2xl font-bold text-white">Engine Synchronization</h3>
+                                <span id="update-badge" class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-slate-800 text-slate-400 border border-white/5 transition-all">Idle</span>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-6 max-w-lg">SeaSearch DAE is a Progressive Web App. Our internal update system ensures your local engine is running the latest discovery protocols and metadata layers.</p>
+                            
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 text-[11px] font-mono text-slate-500 uppercase tracking-widest">
+                                <div>
+                                    <div class="text-slate-600 mb-1">Local Version</div>
+                                    <div class="text-white font-bold" id="current-ver-display">v2.2.0</div>
+                                </div>
+                                <div>
+                                    <div class="text-slate-600 mb-1">Remote Version</div>
+                                    <div class="text-cyan-400 font-bold" id="latest-ver-display">--</div>
+                                </div>
+                                <div class="col-span-2 md:col-span-1">
+                                    <div class="text-slate-600 mb-1">Release Date</div>
+                                    <div class="text-white" id="last-update-display">2024-06-15</div>
+                                </div>
+                            </div>
+
+                            <div id="update-actions" class="flex flex-wrap gap-3 justify-center md:justify-start">
+                                <button onclick="checkForUpdates()" id="check-update-btn" class="bg-white/5 hover:bg-white/10 text-white px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest border border-white/10 transition-colors">Check for Updates</button>
+                                <button onclick="installUpdate()" id="install-update-btn" class="hidden bg-cyan-500 hover:bg-cyan-400 text-white px-8 py-2 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-cyan-500/20 transition-all">Update Now</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -397,12 +476,18 @@
         // Initialize Lucide Icons
         lucide.createIcons();
 
+        // --- System Versioning & Update Registry ---
+        const APP_VERSION = "2.2.0";
+        const LAST_UPDATE_DATE = "2024-06-15";
+        const GITHUB_RAW_URL = "https://raw.githubusercontent.com/SwashX-dev/SeaSearch/main/SeaSearch.html";
+
         // --- Central Source Registry (Extensible Architecture) ---
         const SOURCE_REGISTRY = [
             {
                 id: 'kitsu',
                 name: 'Kitsu Anime API',
                 category: 'anime',
+                sourceType: 'db',
                 isOfficial: true,
                 reliability: 0.95,
                 layer: 'Specialized Hub',
@@ -438,6 +523,7 @@
                 id: 'anilist',
                 name: 'AniList GraphQL',
                 category: 'anime',
+                sourceType: 'db',
                 isOfficial: true,
                 reliability: 0.99,
                 layer: 'Global Repository',
@@ -494,13 +580,14 @@
                 id: 'deep-sea-cache',
                 name: 'Deep Sea Index',
                 category: 'anime',
+                sourceType: 'site',
                 isOfficial: false,
                 reliability: 0.40,
                 layer: 'Community Cache',
                 fetch: async (query) => {
-                    if (!query) return [];
+                    if (!query || query === 'trending' || query === 'new') return [];
                     const resp = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=12`);
-                    const data = await resp.json();
+                    const data = await resp.json().catch(() => ({ data: [] }));
                     return (data.data || []).map(item => ({
                         id: `mal-${item.mal_id}`,
                         title: item.title,
@@ -520,7 +607,47 @@
                         url: item.url
                     }));
                 }
-            }
+            },
+            // Watch Site Sources
+            ...[
+                { id: 'animekai', name: 'AnimeKai', url: 'https://animekai.be/search?keyword=' },
+                { id: '9anime', name: '9Anime', url: 'https://9anime.or.at/search?keyword=' },
+                { id: 'aniwatch', name: 'AniWatch', url: 'https://aniwatchtv.com.ro/search?keyword=' },
+                { id: 'hianime', name: 'HiAnime', url: 'https://hianimes.se/search?keyword=' },
+                { id: 'animedao', name: 'AnimeDao', url: 'https://animedao.in/search?key=' },
+                { id: 'animetsu', name: 'Animetsu', url: 'https://animetsu.net/?s=' },
+                { id: 'animewatchtv', name: 'AnimeWatchTV', url: 'https://animewatchtv.su/search?q=' },
+                { id: 'gogoanime', name: 'GogoAnime', url: 'https://gogoanime.by/search.html?keyword=' }
+            ].map(site => ({
+                id: site.id,
+                name: site.name,
+                category: 'anime',
+                sourceType: 'site',
+                isOfficial: false,
+                reliability: 0.70,
+                layer: 'External Provider',
+                fetch: async (query) => {
+                    if (!query || query === 'trending' || query === 'new') return [];
+                    return [{
+                        id: `${site.id}-${Date.now()}`,
+                        title: query,
+                        type: 'anime',
+                        year: 'Live',
+                        rating: 'Site',
+                        genre: 'Streaming',
+                        platform: site.name,
+                        poster: 'https://images.unsplash.com/photo-1541560052-5e137f229371?auto=format&fit=crop&q=80&w=400',
+                        desc: `Direct streaming access via ${site.name}.`,
+                        isOfficial: false,
+                        layer: 'External Provider',
+                        quality: 'Multi',
+                        lang: 'Sub/Dub',
+                        aliases: [],
+                        reliability: 0.70,
+                        url: `${site.url}${encodeURIComponent(query)}`
+                    }];
+                }
+            }))
         ];
 
         // --- Application State ---
@@ -532,6 +659,8 @@
             selectedPlatforms: [],
             includePirate: false,
             sortBy: 'relevance',
+            updateStatus: 'idle',
+            remoteVersion: null,
             favorites: JSON.parse(localStorage.getItem('seasearch_favs')) || [],
             history: JSON.parse(localStorage.getItem('seasearch_history')) || ['Cyberpunk', 'Formula 1', 'Oppenheimer', 'Modern Anime'],
             loading: false,
@@ -546,6 +675,7 @@
             resultsGrid: document.getElementById('results-grid'),
             autocomplete: document.getElementById('autocomplete-dropdown'),
             categoryFilters: document.getElementById('category-filters'),
+            sourceTypeFilters: document.getElementById('source-type-filters'),
             loadingIndicator: document.getElementById('loading-indicator'),
             emptyState: document.getElementById('empty-state'),
             resultsTitle: document.getElementById('results-title'),
@@ -565,7 +695,12 @@
             indexProgress: document.getElementById('index-progress'),
             aboutDrawer: document.getElementById('about-drawer'),
             favFilter: document.getElementById('fav-filter'),
-            favCount: document.getElementById('fav-count')
+            updateBtn: document.getElementById('check-update-btn'),
+            installBtn: document.getElementById('install-update-btn'),
+            updateBadge: document.getElementById('update-badge'),
+            latestVerDisplay: document.getElementById('latest-ver-display'),
+            updateIcon: document.getElementById('update-icon'),
+            updateIconContainer: document.getElementById('update-icon-container')
         };
 
         // --- Core Functions ---
@@ -573,22 +708,82 @@
         function init() {
             renderRecentSearches();
             updateFavCount();
-            performSearch(); // Initial load (Trending)
-            startContinuousIndexing();
             setupEventListeners();
+            initRedirectShield();
+
+            // Auto-check for success after update reload
+            if (localStorage.getItem('seasearch_update_success')) {
+                localStorage.removeItem('seasearch_update_success');
+                setTimeout(() => alert("SeaSearch DAE updated successfully to v" + APP_VERSION), 800);
+            }
+            
+            // Background update check on startup
+            setTimeout(() => checkForUpdates(true), 3000);
+        }
+
+        window.openConfig = () => {
+            // Sync current state to config inputs
+            document.getElementById('config-pirate-toggle').checked = state.includePirate;
+            document.getElementById('config-source-type').value = state.sourceTypeFilter;
+            
+            elements.startupOverlay = document.getElementById('startup-overlay');
+            elements.startupOverlay.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
+            elements.startupOverlay.classList.add('flex');
+        };
+
+        window.startEngine = () => {
+            // Apply selected settings
+            const pirateVal = document.getElementById('config-pirate-toggle').checked;
+            const sourceVal = document.getElementById('config-source-type').value;
+            
+            state.includePirate = pirateVal;
+            state.sourceTypeFilter = sourceVal;
+            elements.pirateToggle.checked = pirateVal;
+            
+            // Update source UI
+            const sourceBtns = elements.sourceTypeFilters.querySelectorAll('button');
+            sourceBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.sourceType === sourceVal));
+
+            // Hide overlay and boot engine
+            const overlay = document.getElementById('startup-overlay');
+            overlay.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+            
+            performSearch();
+            startContinuousIndexing();
+        };
+
+        // --- SeaSearch Redirect Shield ---
+        function initRedirectShield() {
+            let internalNav = false;
+            
+            // Track legitimate clicks within the DAE
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('a') || e.target.closest('button')) {
+                    internalNav = true;
+                    setTimeout(() => { internalNav = false; }, 1000);
+                }
+            }, true);
+
+            // Intercept unauthorized redirects
+            window.addEventListener('beforeunload', (e) => {
+                if (!internalNav) {
+                    e.preventDefault();
+                    return e.returnValue = "SeaSearch Redirect Shield: An unauthorized external redirect was detected. Stay on this page?";
+                }
+            });
         }
 
         function setupEventListeners() {
             // Search input events
             elements.searchInput.addEventListener('input', (e) => {
-                const val = e.target.value;
-                if (val.length === 0) {
-                    state.query = '';
-                    performSearch();
-                } else if (val.length > 1) {
+                const val = e.target.value.trim();
+                state.query = val; // Always update state.query
+                if (val.length >= 1) { // Show autocomplete for 1 or more characters
                     showAutocomplete(val);
                 } else {
                     elements.autocomplete.classList.add('hidden');
+                    elements.autocomplete.classList.add('hidden');
+                    performSearch(); // If empty, hide autocomplete and perform search for trending
                 }
             });
 
@@ -604,6 +799,16 @@
                     elements.categoryFilters.querySelector('.active').classList.remove('active');
                     btn.classList.add('active');
                     state.filter = btn.dataset.filter;
+                    performSearch();
+                });
+            });
+
+            // Source Type Filters
+            elements.sourceTypeFilters.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    elements.sourceTypeFilters.querySelector('.active').classList.remove('active');
+                    btn.classList.add('active');
+                    state.sourceTypeFilter = btn.dataset.sourceType;
                     performSearch();
                 });
             });
@@ -656,12 +861,10 @@
 
         function executeSearch() {
             const query = elements.searchInput.value.trim();
-            if (query) {
-                addToHistory(query);
-                state.query = query;
-                performSearch();
-                elements.autocomplete.classList.add('hidden');
-            }
+            state.query = query; // Always update state.query
+            if (query) addToHistory(query); // Only add to history if there's an actual query
+            performSearch(); // Always perform search
+            elements.autocomplete.classList.add('hidden');
         }
 
         window.toggleAbout = () => {
@@ -676,6 +879,74 @@
             performSearch();
         };
 
+        window.checkForUpdates = async (isAuto = false) => {
+            if (!isAuto) {
+                elements.updateBtn.textContent = 'Checking...';
+                elements.updateBtn.disabled = true;
+                elements.updateBadge.textContent = 'Checking for Updates...';
+                elements.updateIcon.classList.add('animate-spin');
+            }
+            
+            try {
+                const response = await fetch(GITHUB_RAW_URL, { cache: "no-store" });
+                const text = await response.text();
+                const versionMatch = text.match(/const APP_VERSION = "(.*?)"/);
+                const remoteVer = versionMatch ? versionMatch[1] : null;
+
+                if (remoteVer && remoteVer !== APP_VERSION) {
+                    state.updateStatus = 'available';
+                    state.remoteVersion = remoteVer;
+                    renderUpdateUI(true);
+                } else {
+                    state.updateStatus = 'up-to-date';
+                    if (!isAuto) renderUpdateUI(false);
+                }
+            } catch (error) {
+                console.error("DAE Update Check Failed:", error);
+                state.updateStatus = 'failed';
+                if (!isAuto) renderUpdateUI(false);
+            }
+        };
+
+        function renderUpdateUI(available) {
+            if (available) {
+                elements.updateBadge.textContent = 'Update Available';
+                elements.updateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-black uppercase bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
+                elements.latestVerDisplay.textContent = 'v' + state.remoteVersion;
+                elements.installBtn.classList.remove('hidden');
+                elements.updateIconContainer.classList.add('bg-cyan-500/20');
+                elements.updateIcon.classList.add('animate-spin');
+            } else {
+                const failed = state.updateStatus === 'failed';
+                elements.updateBadge.textContent = failed ? 'Sync Failed' : 'Up to Date';
+                elements.updateBadge.className = failed ? 
+                    'px-2 py-0.5 rounded text-[10px] font-black uppercase bg-red-500/20 text-red-400 border border-red-500/30' :
+                    'px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-500/20 text-green-400 border border-green-500/30';
+                
+                elements.latestVerDisplay.textContent = 'v' + APP_VERSION;
+                elements.installBtn.classList.add('hidden');
+                elements.updateIcon.classList.remove('animate-spin');
+                elements.updateBtn.disabled = false;
+                elements.updateBtn.textContent = 'Check for Updates';
+            }
+            lucide.createIcons();
+        }
+
+        window.installUpdate = async () => {
+            elements.installBtn.textContent = 'Synchronizing...';
+            elements.installBtn.disabled = true;
+            elements.updateIcon.classList.replace('text-cyan-400', 'text-white');
+            
+            // Real-world PWA update logic involves the Service Worker lifecycle,
+            // but for a single-file DAE, we perform a cache-bust reload.
+            await new Promise(r => setTimeout(r, 2000));
+            
+            localStorage.setItem('seasearch_update_success', 'true');
+            
+            // Reload with cache-busting to ensure latest file is pulled
+            window.location.href = window.location.pathname + '?v=' + state.remoteVersion;
+        };
+
         async function performSearch() {
             const query = state.query.toLowerCase();
             setLoading(true);
@@ -687,12 +958,13 @@
             `;
             
             try {
-                elements.loadingText.textContent = "DAE Multi-Source Broadcast...";
+                elements.loadingText.textContent = `DAE Multi-Source Broadcast: "${state.query || 'Trending'}"`;
                 
                 // Filter active sources based on category
                 const activeSources = SOURCE_REGISTRY.filter(s => 
                     (state.filter === 'all' || s.category === state.filter) &&
-                    (state.includePirate || s.isOfficial)
+                    (state.includePirate || s.isOfficial) &&
+                    (state.sourceTypeFilter === 'all' || s.sourceType === state.sourceTypeFilter)
                 );
 
                 // Execute parallel fetches from all configured sources
@@ -741,7 +1013,7 @@
             }
             
             setLoading(false);
-            elements.resultsTitle.textContent = state.query ? `Discovery for "${state.query}"` : 'Universal Feed';
+            elements.resultsTitle.textContent = state.query ? `Discovery for "${state.query}"` : 'Universal Feed (Trending)';
             
             if (state.results.length === 0) {
                 elements.resultsCount.textContent = '0 results aggregated';
@@ -905,13 +1177,18 @@
             executeSearch();
         };
 
-        window.copyLink = (title, btn) => {
+        window.copyLink = (title, btnElement) => {
             navigator.clipboard.writeText(`https://seasearch.com/watch?q=${encodeURIComponent(title)}`);
-            const originalHtml = '<i data-lucide="share-2" class="w-4 h-4 text-slate-400"></i>';
-            const successHtml = '<i data-lucide="check" class="w-4 h-4 text-green-400"></i>';
-            if (btn) btn.innerHTML = successHtml;
-            lucide.createIcons();
-            setTimeout(() => { if(btn) btn.innerHTML = originalHtml; lucide.createIcons(); }, 2000);
+            
+            if (btnElement) {
+                const originalIcon = btnElement.innerHTML;
+                btnElement.innerHTML = '<i data-lucide="check" class="w-4 h-4 text-green-400"></i>';
+                lucide.createIcons();
+                setTimeout(() => {
+                    btnElement.innerHTML = originalIcon;
+                    lucide.createIcons();
+                }, 2000);
+            }
         };
 
         window.toggleFavorite = (id) => {
@@ -947,7 +1224,7 @@
                     </div>
                 `;
             } else {
-                elements.favList.innerHTML = state.favorites.map(item => `
+                elements.favList.innerHTML = items.map(item => `
                     <div class="flex gap-4 bg-slate-800/40 p-3 rounded-xl border border-white/5 relative">
                         <img src="${item.poster}" class="w-16 h-20 rounded-lg object-cover">
                         <div class="flex-grow pr-6">
